@@ -53,6 +53,9 @@ impl pallet_template::Config for Test {
 	type Event = Event;
 }
 
+pub const A: u64 = 0;
+pub const B: u64 = 1;
+
 // Build genesis storage according to the mock runtime.
 pub fn new_test_ext() -> sp_io::TestExternalities {
 	system::GenesisConfig::default().build_storage::<Test>().unwrap().into()

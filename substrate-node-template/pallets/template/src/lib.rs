@@ -22,13 +22,7 @@
 pub use pallet::*;
 
 // #[cfg(test)]
-// mod mock;
-
-// #[cfg(test)]
 // mod tests;
-
-// #[cfg(feature = "runtime-benchmarks")]
-// mod benchmarking;
 
 #[frame_support::pallet]
 pub mod pallet {
@@ -102,7 +96,7 @@ pub mod pallet {
 	// pallet dispatchables
 	#[pallet::call]
 	impl<T: Config> Pallet<T> {
-		/// create_new_record(patient_id: OriginFor<T>, name: String, sex: String, age:u16)
+		/// create_new_record(name, sex, age)
 		#[pallet::weight(10_000 + T::DbWeight::get().writes(1))]
 		pub fn create_new_record(
 			origin: OriginFor<T>,
