@@ -1,0 +1,6 @@
+# ignore everything
+*
+
+# do not ignore pallet folder
+!substrate-node-template/pallets/template
+!.gitignore

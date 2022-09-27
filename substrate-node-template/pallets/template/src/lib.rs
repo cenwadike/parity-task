@@ -1,8 +1,24 @@
+//! # Patient Biodata
+//!
+//! ## Overview
+//!
+//! This pallet supports creating record of patient data.  It also allow patients
+//! to grant or revoke access to their biodata
+//!
+//! ## Interface
+//!
+//! ### Config
+//!
+//! ### Dispatchable functions
+//!
+//! * `create_new_record(orgin, name, age, sex)` - Create a new patient record
+//! * `grant_access(orgin, new_access_id, record_id)` - Grant access to patient record to
+//!   new_access_id. Only patient can grant access
+//! * `grant_access(origin, access_id, record_id)` - Revoke access to patient record from access_id.
+//!   Only patient can revoke access
+
 #![cfg_attr(not(feature = "std"), no_std)]
 
-/// Edit this file to define custom logic or remove it if it is not needed.
-/// Learn more about FRAME and the core library of Substrate FRAME pallets:
-/// <https://docs.substrate.io/reference/frame-pallets/>
 pub use pallet::*;
 
 // #[cfg(test)]
@@ -16,87 +32,161 @@ pub use pallet::*;
 
 #[frame_support::pallet]
 pub mod pallet {
-	use frame_support::pallet_prelude::*;
+	use frame_support::{inherent::Vec, pallet_prelude::*};
 	use frame_system::pallet_prelude::*;
 
 	#[pallet::pallet]
 	#[pallet::generate_store(pub(super) trait Store)]
 	pub struct Pallet<T>(_);
 
-	/// Configure the pallet by specifying the parameters and types on which it depends.
+	// pallet config
 	#[pallet::config]
 	pub trait Config: frame_system::Config {
-		/// Because this pallet emits events, it depends on the runtime's definition of an event.
+		// ubiquitous event trait
 		type Event: From<Event<Self>> + IsType<<Self as frame_system::Config>::Event>;
 	}
 
-	// The pallet's runtime storage items.
-	// https://docs.substrate.io/main-docs/build/runtime-storage/
-	#[pallet::storage]
-	#[pallet::getter(fn something)]
-	// Learn more about declaring storage items:
-	// https://docs.substrate.io/main-docs/build/runtime-storage/#declaring-storage-items
-	pub type Something<T> = StorageValue<_, u32>;
+	#[derive(Clone, Eq, PartialEq, Default, RuntimeDebug, Encode, Decode)]
+	pub struct PatientBiodata<AccountId> {
+		pub patient_id: AccountId,
+		pub name: Vec<u8>,
+		pub sex: Vec<u8>,
+		pub age: u16,
+		pub record_id: u64,
+		pub access: Vec<AccountId>,
+	}
 
-	// Pallets use events to inform users when important changes are made.
-	// https://docs.substrate.io/main-docs/build/events-errors/
+	// type alias
+	type AccountIdOf<T> = <T as frame_system::Config>::AccountId;
+	type BiodataOf<T> = PatientBiodata<AccountIdOf<T>>;
+
+	#[pallet::storage]
+	#[pallet::getter(fn recordId)]
+	pub type RecordId<T> = StorageValue<_, u64>;
+
+	/// The lookup table for patients biodata. patient_id -> PatientBiodata
+	#[pallet::storage]
+	#[pallet::getter(fn biodata)]
+	pub(super) type Biodata<T: Config> =
+		StorageMap<_, Twox64Concat, T::AccountId, BiodataOf<AccountIdOf<T>>, ValueQuery>;
+
+	// pallet events
 	#[pallet::event]
 	#[pallet::generate_deposit(pub(super) fn deposit_event)]
 	pub enum Event<T: Config> {
-		/// Event documentation should end with an array that provides descriptive names for event
-		/// parameters. [something, who]
-		SomethingStored(u32, T::AccountId),
+		/// new patient record is created [patient_id, record_id]
+		NewRecordCreated(T::AccountId, u64),
+
+		/// access granted to patient record [patient_id, access_id, record_id]
+		NewAccessGranted(T::AccountId, T::AccountId, u64),
+
+		/// access revoked from patient record [patient_id, access_id, record_id]
+		AccessRevoked(T::AccountId, T::AccountId, u64),
 	}
 
 	// Errors inform users that something went wrong.
 	#[pallet::error]
 	pub enum Error<T> {
-		/// Error names should be descriptive.
-		NoneValue,
-		/// Errors should have helpful documentation associated with them.
+		/// only patient can grant or revoke access to their record
+		PermissionDenied,
+		/// record does not exist
+		RecordDoesNotExist,
+		/// access already exist
+		AccessExist,
+		/// access does not exist
+		AccessDoesNotExist,
+		/// storage overflow for patient record
 		StorageOverflow,
 	}
 
-	// Dispatchable functions allows users to interact with the pallet and invoke state changes.
-	// These functions materialize as "extrinsics", which are often compared to transactions.
-	// Dispatchable functions must be annotated with a weight and must return a DispatchResult.
+	// pallet dispatchables
 	#[pallet::call]
 	impl<T: Config> Pallet<T> {
-		/// An example dispatchable that takes a singles value as a parameter, writes the value to
-		/// storage and emits an event. This function must be dispatched by a signed extrinsic.
+		/// create_new_record(patient_id: OriginFor<T>, name: String, sex: String, age:u16)
 		#[pallet::weight(10_000 + T::DbWeight::get().writes(1))]
-		pub fn do_something(origin: OriginFor<T>, something: u32) -> DispatchResult {
-			// Check that the extrinsic was signed and get the signer.
-			// This function will return an error if the extrinsic is not signed.
-			// https://docs.substrate.io/main-docs/build/origins/
-			let who = ensure_signed(origin)?;
+		pub fn create_new_record(
+			origin: OriginFor<T>,
+			name: Vec<u8>,
+			sex: Vec<u8>,
+			age: u16,
+		) -> DispatchResult {
+			let patient_id = ensure_signed(origin)?;
 
-			// Update storage.
-			<Something<T>>::put(something);
+			let record_id;
 
-			// Emit an event.
-			Self::deposit_event(Event::SomethingStored(something, who));
-			// Return a successful DispatchResultWithPostInfo
+			//get and update records id
+			match <RecordId<T>>::get() {
+				None => <RecordId<T>>::put(1),
+				Some(record_id) => {
+					// increment record_id
+					let new_record_id = record_id.checked_add(1).ok_or(Error::<T>::StorageOverflow)?;
+					<RecordId<T>>::put(new_record_id)
+				},
+			}
+
+			// add new patient record to storage
+			let pt_biodata =
+				PatientBiodata { patient_id, name, sex, age, record_id, access: Vec::new() };
+			<Biodata<T>>::insert(&record_id, &pt_biodata);
+
+			Self::deposit_event(Event::NewRecordCreated(patient_id, record_id));
 			Ok(())
 		}
 
-		/// An example dispatchable that may throw a custom error.
+		/// grant_access(patient_id: OriginFor<T>, access_id: AccountId, record_id: u64)
 		#[pallet::weight(10_000 + T::DbWeight::get().reads_writes(1,1))]
-		pub fn cause_error(origin: OriginFor<T>) -> DispatchResult {
-			let _who = ensure_signed(origin)?;
+		pub fn grant_access(
+			origin: OriginFor<T>,
+			access_id: AccountIdOf<T>,
+			record_id: u64,
+		) -> DispatchResult {
+			let patient_id = ensure_signed(origin)?;
 
-			// Read a value from storage.
-			match <Something<T>>::get() {
-				// Return an error if the value has not been set.
-				None => return Err(Error::<T>::NoneValue.into()),
-				Some(old) => {
-					// Increment the value read from storage; will error in the event of overflow.
-					let new = old.checked_add(1).ok_or(Error::<T>::StorageOverflow)?;
-					// Update the value in storage with the incremented result.
-					<Something<T>>::put(new);
-					Ok(())
-				},
-			}
+			// ensure signer is patient
+			let is_patient = <Biodata<T>>::get(&record_id).patient_id;
+			ensure!(is_patient == patient_id, <Error<T>>::PermissionDenied);
+
+			// check if record exist
+			let record_exist = <Biodata<T>>::contains_key(&record_id);
+			ensure!(record_exist, <Error<T>>::RecordDoesNotExist);
+
+			// check if access already granted
+			let access_exist = <Biodata<T>>::get(&record_id).access.contains(&record_id);
+			ensure!(!access_exist, <Error<T>>::AccessExist);
+
+			// add new access id
+			<Biodata<T>>::get(&record_id).access.push(access_id);
+
+			Self::deposit_event(Event::NewAccessGranted(patient_id, access_id, record_id));
+			Ok(())
+		}
+
+		/// revoke_access(patient_idaccess_id: AccountId, record_id: u64)
+		#[pallet::weight(10_000 + T::DbWeight::get().reads_writes(1,1))]
+		pub fn revoke_access(
+			origin: OriginFor<T>,
+			access_id: AccountIdOf<T>,
+			record_id: u64,
+		) -> DispatchResult {
+			let patient_id = ensure_signed(origin)?;
+
+			// ensure signer is patient
+			let is_patient = <Biodata<T>>::get(&record_id).patient_id;
+			ensure!(is_patient == patient_id, <Error<T>>::PermissionDenied);
+
+			// check if record exist
+			let record_exist = <Biodata<T>>::contains_key(&record_id);
+			ensure!(record_exist, <Error<T>>::RecordDoesNotExist);
+
+			// check if access exist
+			let access_exist = <Biodata<T>>::get(&record_id).access.contains(&record_id);
+			ensure!(access_exist, <Error<T>>::AccessDoesNotExist);
+
+			// add new access id
+			<Biodata<T>>::get(&record_id).access.pop(access_id);
+
+			Self::deposit_event(Event::AccessRevoked(patient_id, access_id, record_id));
+			Ok(())
 		}
 	}
 }
