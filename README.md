@@ -15,7 +15,7 @@ It also allow patients to grant or revoke access to their biodata for a given ac
    Create a new patient record. patient_id is Origin.
 * `grant_access(patient_id, new_access_id, record_id)` 
    Grant access to patient record to new_access_id. Only patient can grant access to their data
-* `grant_access(patient_id, access_id, record_id)` 
+* `revoke_access(patient_id, access_id, record_id)` 
    Revoke access to patient record from access_id. Only patient can revoke access to their data
 
 
