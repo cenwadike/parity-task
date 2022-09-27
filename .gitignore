@@ -1,6 +1,6 @@
 # ignore everything
 *
-
-# do not ignore pallet folder
+# except...
 !substrate-node-template/pallets/template
 !.gitignore
+!README.md
